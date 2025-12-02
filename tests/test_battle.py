@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from srsim.core.abilities import ActionConfig, UnitKit
 from srsim.core.battle_state import BattleState
 from srsim.core.engine import BattleEngine
