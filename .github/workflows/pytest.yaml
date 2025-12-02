@@ -3,9 +3,9 @@
 
 on:
   push:
-    branches: [ main ]
+    branches: [master]
   pull_request:
-    branches: [ main ]
+    branches: [master]
 
 jobs:
   test:
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.14t'
+          python-version: "3.14t"
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -37,5 +37,3 @@ jobs:
         run: uv sync
       - name: Run pytest
         run: uv run pytest -v
-
-
