@@ -16,10 +16,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.14t"
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
