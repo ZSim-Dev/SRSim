@@ -1,0 +1,3 @@
+[submodule "src/starrail-data"]
+	path = src/starrail-data
+	url = https://github.com/theBowja/starrail-data.git
