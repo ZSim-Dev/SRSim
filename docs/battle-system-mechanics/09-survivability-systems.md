@@ -24,7 +24,7 @@ ShieldValue = (ScalingStat × ShieldRatio + FlatShield)
 
 建议：
 
-- 护盾是一个或多个 `ShieldInstance` 的栈，不一定是一个总数字。  
+- 护盾是一个或多个 `ShieldInstance` 的栈，不一定是一个总数字。
 - 这样才能处理：来源不同、持续时间不同、是否可刷新不同。
 
 ### 9.3 受击顺序建议

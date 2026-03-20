@@ -1,8 +1,8 @@
 from srsim.core.abilities import ActionConfig, UnitKit
 from srsim.core.actions import BasicAttackAction
 from srsim.core.battle_state import BattleState
-from srsim.core.engine import BattleEngine
 from srsim.core.elements import Element
+from srsim.core.engine import BattleEngine
 from srsim.core.enums import ActionType, Faction
 from srsim.core.events import EventType
 from srsim.core.stats import Stats
@@ -10,7 +10,6 @@ from srsim.core.statuses import StatusEffect, StatusKind, StatusTemplate, TickTi
 from srsim.core.timeline import Timeline
 from srsim.core.toughness import ToughnessState
 from srsim.core.unit import Unit
-
 
 TEST_BUFF = StatusTemplate(
     name="Test Buff",

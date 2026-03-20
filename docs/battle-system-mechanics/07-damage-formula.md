@@ -46,8 +46,8 @@ CritMult = 1             // 否则
 
 高确定项：
 
-- 多段攻击逐段判暴击。  
-- 普通角色 DoT 不暴击。  
+- 多段攻击逐段判暴击。
+- 普通角色 DoT 不暴击。
 - 击破伤害与超击破通常不暴击。
 
 ### 7.4 DMGBoost（增伤区）
@@ -91,8 +91,8 @@ EffectiveDEFModifier = max(0, 1 + DEFBonus - DEFReduction - DEFIgnore)
 
 说明：
 
-- `DEFReduction`：施加在目标身上的减防。  
-- `DEFIgnore`：攻击者无视防御。  
+- `DEFReduction`：施加在目标身上的减防。
+- `DEFIgnore`：攻击者无视防御。
 - 二者同区，都会降低目标有效防御。
 
 ### 7.7 RES（抗性区）
@@ -106,7 +106,7 @@ RESMult = 1 - EffectiveRES
 
 说明：
 
-- 下限 `-100%`、上限 `90%` 主要来自社区通行实现。  
+- 下限 `-100%`、上限 `90%` 主要来自社区通行实现。
 - 如果后续拿到更权威版本，可替换 clamp。
 
 ### 7.8 Vulnerability（易伤 / 受伤提高区）
@@ -138,7 +138,7 @@ DMGMitigationMult = ∏(1 - mitigation_i)
 
 高确定项：
 
-- 目标未 Broken 时，常规入伤会吃一个 `0.9` 乘区。  
+- 目标未 Broken 时，常规入伤会吃一个 `0.9` 乘区。
 - 目标 Broken 时，该乘区回到 `1.0`。
 
 推荐实现：

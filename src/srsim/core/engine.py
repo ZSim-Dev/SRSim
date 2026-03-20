@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from .actions import BaseAction, UltimateAction
 from .ai import SimpleAI
 from .battle_state import BattleState
-from .events import EventType
 from .enums import ActionType
+from .events import EventType
 from .pending_actions import PendingActionQueue
 from .statuses import TickTiming
 from .unit import Unit

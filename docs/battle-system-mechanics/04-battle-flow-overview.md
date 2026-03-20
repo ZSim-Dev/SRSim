@@ -25,16 +25,16 @@
 
 高确定项：
 
-- 一些 Technique 明确写的是“**at the start of the next battle**”，因此**战前技不是即时战斗中事件，而是入战时注入状态/伤害/控制/位移**。  
-- 终结技可以在战斗开始时、尚未扣除 AV 前使用。  
+- 一些 Technique 明确写的是“**at the start of the next battle**”，因此**战前技不是即时战斗中事件，而是入战时注入状态/伤害/控制/位移**。
+- 终结技可以在战斗开始时、尚未扣除 AV 前使用。
 - 若发生 **Ambush（伏击）**，全队统一**后移 20 AV**，且这项修正**不依赖 SPD 或其他 AG 修正**。
 
 ### 4.2 波次开始（Wave Start）
 
 高确定项：
 
-- “每波开始时”是独立事件窗口，不等价于 Battle Start。  
-- 一些效果明确写“at the start of each wave”。  
+- “每波开始时”是独立事件窗口，不等价于 Battle Start。
+- 一些效果明确写“at the start of each wave”。
 - 某些倒计时对象/特殊机制**不会在每波开始时重置 AV**，需要按效果文本单独判断。
 
 ### 4.3 单次行动生命周期

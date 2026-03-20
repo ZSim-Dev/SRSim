@@ -10,8 +10,8 @@
 
 高确定项：
 
-- Follow-Up Attack 是一类**自动触发的额外攻击**。  
-- 它仍然是攻击实例，因此仍可走普通命中/伤害/削韧/触发流程。  
+- Follow-Up Attack 是一类**自动触发的额外攻击**。
+- 它仍然是攻击实例，因此仍可走普通命中/伤害/削韧/触发流程。
 - 但它带有专属标签，因此会受“追加攻击增伤/易伤”影响。
 
 推荐实现：
@@ -24,7 +24,7 @@ attack.tags = ['attack', 'follow_up']
 
 高确定项：
 
-- Counter 本质是自动触发的攻击。  
+- Counter 本质是自动触发的攻击。
 - 部分页面把它视为 Follow-Up Attack 的一个子类或相关分支。
 
 建议：
@@ -39,9 +39,9 @@ attack.tags = ['attack', 'counter', 'follow_up']
 
 角色 DoT 采用常规伤害体系，但：
 
-- 不暴击  
-- 不视作普通 hit  
-- 是否削韧通常为否  
+- 不暴击
+- 不视作普通 hit
+- 是否削韧通常为否
 - 受 DoT 专属增伤/易伤影响
 
 推荐公式：
@@ -62,9 +62,9 @@ DoTDamage = BaseDoT
 
 高确定项：击破伤害与普通攻击伤害是独立体系。其特点：
 
-- 主要受角色等级、击破特攻、目标最大 Toughness、元素基础倍率影响。  
-- 不暴击。  
-- 不吃普通 DMGBoost。  
+- 主要受角色等级、击破特攻、目标最大 Toughness、元素基础倍率影响。
+- 不暴击。
+- 不吃普通 DMGBoost。
 - 吃 DEF、RES、Vulnerability、DMGMitigation、Broken 等目标乘区。
 
 推荐骨架：
@@ -106,7 +106,7 @@ MaxToughnessMult = 0.5 + TargetMaxToughness / 40
 
 建议按两部分建模：
 
-- 立即击破伤害  
+- 立即击破伤害
 - 后续 Bleed
 
 Wiki 摘要给出：
@@ -134,8 +134,8 @@ Wiki 摘要给出：
 
 高确定项：
 
-- 被冻结单位在其应行动时失去该次行动。  
-- 会承受 Ice Break 相关伤害。  
+- 被冻结单位在其应行动时失去该次行动。
+- 会承受 Ice Break 相关伤害。
 - 随后有“50% 提前下一次行动”的时序表现。
 
 工程上建议把它拆成：
@@ -152,8 +152,8 @@ Wiki 摘要给出：
 
 高确定项：
 
-- 有基础 `20%` 行动延后。  
-- 下次轮到目标时附带延迟伤害。  
+- 有基础 `20%` 行动延后。
+- 下次轮到目标时附带延迟伤害。
 - 延后量受 Break Effect 影响。
 
 建议做成：
@@ -164,12 +164,12 @@ Wiki 摘要给出：
 
 高确定项：
 
-- 存在延后/控制表现，且 Break Effect 会影响其延后程度。  
+- 存在延后/控制表现，且 Break Effect 会影响其延后程度。
 - 但本轮没有拿到统一的干净总公式。
 
 建议：
 
-- 把虚数击破的延后量做成版本配置项。  
+- 把虚数击破的延后量做成版本配置项。
 - 先用与社区一致的近似实现，等补实测后替换。
 
 ### 8.8 超击破（Super Break）
@@ -191,8 +191,8 @@ SuperBreakDamage = LevelMult
 
 高可信但未完全锁死的原因：
 
-- 游戏版本中 Toughness 显示口径可能发生过变化。  
-- 某些角色/状态会额外修改 Super Break 乘区。  
+- 游戏版本中 Toughness 显示口径可能发生过变化。
+- 某些角色/状态会额外修改 Super Break 乘区。
 - 公开来源更偏社区实测而非官方完整公式。
 
 实现建议：
@@ -211,9 +211,9 @@ interface SuperBreakConfig {
 
 高可信社区确认项：
 
-- `Elation DMG` 是**独立伤害类别**，不是普通 `DMG Boost` 框架里的常规攻击伤害。  
-- 它有单独公式分支，数值与 **Punchline、Elation(Stat)、角色等级**有关。  
-- 它**不受普通 DMG Boost 影响**。  
+- `Elation DMG` 是**独立伤害类别**，不是普通 `DMG Boost` 框架里的常规攻击伤害。
+- 它有单独公式分支，数值与 **Punchline、Elation(Stat)、角色等级**有关。
+- 它**不受普通 DMG Boost 影响**。
 - 它仍然会经过目标侧乘区：
   - `Weaken`
   - `DEF`
@@ -221,7 +221,7 @@ interface SuperBreakConfig {
   - `Vulnerability`
   - `DMG Mitigation`
   - `Broken`
-- 它可以暴击。  
+- 它可以暴击。
 - 它存在专属 `Elation DMG Vulnerability`，因此不能直接并入普通易伤桶。
 
 对模拟器，建议扩展伤害类别：
@@ -252,15 +252,15 @@ ElationDamage = ElationBase
 
 实现解释：
 
-- `ElationBase` 应单独由 `AbilityMultiplier × LevelMultiplier × (1 + ElationStat)` 这一类字段构成。  
-- 不默认乘入普通 `DMGBoostMult`。  
-- 只有文本明确写“Elation DMG 提高”或“Elation DMG Vulnerability”时，才进入对应专属桶。  
+- `ElationBase` 应单独由 `AbilityMultiplier × LevelMultiplier × (1 + ElationStat)` 这一类字段构成。
+- 不默认乘入普通 `DMGBoostMult`。
+- 只有文本明确写“Elation DMG 提高”或“Elation DMG Vulnerability”时，才进入对应专属桶。
 - 若某次欢愉伤害同时具有元素属性，则元素只决定属性/抗性侧结算，不代表它自动吃普通属性伤害提高。
 
 工程建议：
 
-1. 给伤害包同时保留 `element` 与 `damageClass='elation'`。  
-2. 不要把 `Elation Skill` 自动等同于 `Skill`、`Follow-Up Attack` 或 `Counter`。  
+1. 给伤害包同时保留 `element` 与 `damageClass='elation'`。
+2. 不要把 `Elation Skill` 自动等同于 `Skill`、`Follow-Up Attack` 或 `Counter`。
 3. 所有与 Punchline / Merrymake / Certified Banger 相关的数值，最好做成独立资源与状态桶。
 
 ---

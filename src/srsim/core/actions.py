@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 from .abilities import ActionConfig
 from .damage import DamageContext, calculate_damage, calculate_healing, calculate_shield
-from .events import EventType
 from .enums import ActionType
+from .events import EventType
 from .unit import Unit
 
 if TYPE_CHECKING:

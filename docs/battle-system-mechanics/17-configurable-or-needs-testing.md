@@ -54,7 +54,7 @@
 }
 ```
 
-其中 Basic / Enhanced Basic / Skill / Ultimate / Kill / ERR 乘算关系已经有较强公开来源。  
+其中 Basic / Enhanced Basic / Skill / Ultimate / Kill / ERR 乘算关系已经有较强公开来源。
 真正仍需录像/实测补齐的是：
 
 - 敌方各攻击模板对应哪一个 `beingHitBucket`

@@ -34,10 +34,7 @@ class BaseRepository(Generic[ModelType]):
 
     async def list_all(self, language: str, offset: int = 0, limit: int = 100) -> list[ModelType]:
         stmt = (
-            select(self._model)
-            .where(self._model.language == language)
-            .offset(offset)
-            .limit(limit)
+            select(self._model).where(self._model.language == language).offset(offset).limit(limit)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -45,9 +42,7 @@ class BaseRepository(Generic[ModelType]):
     async def count(self, language: str) -> int:
         from sqlalchemy import func
 
-        stmt = select(func.count()).select_from(self._model).where(
-            self._model.language == language
-        )
+        stmt = select(func.count()).select_from(self._model).where(self._model.language == language)
         result = await self._session.execute(stmt)
         return result.scalar() or 0
 

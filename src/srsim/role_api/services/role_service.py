@@ -218,9 +218,11 @@ class RoleService:
             )
 
         skill = self._convert_model(
-            (await self._loader.get_skills_by_ids(
-                session=session, language=language, ids=[skill_id]
-            ))[0],
+            (
+                await self._loader.get_skills_by_ids(
+                    session=session, language=language, ids=[skill_id]
+                )
+            )[0],
             RoleSkillData,
             resource_name="skill",
         )
