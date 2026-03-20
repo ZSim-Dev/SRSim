@@ -11,6 +11,11 @@
 - Now we are developing the game core, and only use cli.
 - This project are using python 3.14 free threaded build.
 
+
+## Docs
+
+- Read `docs/battle-system-mechanics.md` for battle system developing first, and read the detailed doc indexed.
+
 ## Reply
 
 - 永远用简体中文回答用户
