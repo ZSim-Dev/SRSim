@@ -1,11 +1,26 @@
-import json
 import os
 from collections.abc import Sequence
 from http import HTTPStatus
 from pathlib import Path
-from typing import ClassVar, cast
+from typing import Any, ClassVar
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from srsim.role_api.core.exceptions import AppException
+from srsim.role_api.db.models import (
+    CharacterModel,
+    PromotionModel,
+    RankModel,
+    SkillModel,
+    SkillTreeModel,
+)
+from srsim.role_api.db.repositories import (
+    CharacterRepository,
+    PromotionRepository,
+    RankRepository,
+    SkillRepository,
+    SkillTreeRepository,
+)
 from srsim.role_api.models.base import ResponseBaseModel
 from srsim.role_api.models.role_data import (
     CharacterBaseInfo,
@@ -17,12 +32,8 @@ from srsim.role_api.models.role_data import (
 
 
 class RoleDataLoader:
-    _CHARACTERS_FILE: ClassVar[str] = "characters.json"
-    _SKILLS_FILE: ClassVar[str] = "character_skills.json"
-    _RANKS_FILE: ClassVar[str] = "character_ranks.json"
-    _SKILL_TREES_FILE: ClassVar[str] = "character_skill_trees.json"
-    _PROMOTIONS_FILE: ClassVar[str] = "character_promotions.json"
     _ENV_DATA_ROOT: ClassVar[str] = "SRSIM_ROLE_DATA_ROOT"
+    _CHARACTERS_FILE: ClassVar[str] = "characters.json"
 
     def __init__(self, *, data_root: Path | None = None) -> None:
         default_data_root = Path(__file__).resolve().parents[4] / "index_new"
@@ -31,7 +42,10 @@ class RoleDataLoader:
             Path(env_data_root).expanduser() if env_data_root is not None else default_data_root
         )
         self._data_root: Path = data_root or resolved_data_root
-        self._file_cache: dict[tuple[str, str], dict[str, ResponseBaseModel]] = {}
+
+    @property
+    def data_root(self) -> Path:
+        return self._data_root
 
     def supported_languages(self) -> list[str]:
         if not self._data_root.is_dir():
@@ -42,171 +56,195 @@ class RoleDataLoader:
             if path.is_dir() and (path / self._CHARACTERS_FILE).is_file()
         )
 
-    def list_characters(
+    async def list_characters(
         self,
+        session: AsyncSession,
         language: str,
         offset: int = 0,
         limit: int = 20,
     ) -> list[ResponseBaseModel]:
         self._validate_pagination(offset=offset, limit=limit)
-        characters = list(self._load_characters(language).values())
-        return characters[offset : offset + limit]
+        repo = CharacterRepository(session)
+        models = await repo.list_all(language=language, offset=offset, limit=limit)
+        return [self._character_model_to_pydantic(m) for m in models]
 
-    def get_character(self, language: str, role_id: str) -> ResponseBaseModel:
-        character = self._load_characters(language).get(role_id)
-        if character is None:
+    async def get_character(
+        self,
+        session: AsyncSession,
+        language: str,
+        role_id: str,
+    ) -> ResponseBaseModel:
+        repo = CharacterRepository(session)
+        model = await repo.get_by_id(role_id, language)
+        if model is None:
             raise AppException(
                 status_code=HTTPStatus.NOT_FOUND,
                 code=40402,
                 message=f"role not found: {role_id}",
             )
-        return character
+        return self._character_model_to_pydantic(model)
 
-    def get_skills_by_ids(self, language: str, ids: Sequence[str]) -> list[ResponseBaseModel]:
-        return self._collect_by_ids(
-            resource_name="skills",
-            ids=ids,
-            resource_map=self._load_skills(language),
-        )
-
-    def get_ranks_by_ids(self, language: str, ids: Sequence[str]) -> list[ResponseBaseModel]:
-        return self._collect_by_ids(
-            resource_name="ranks",
-            ids=ids,
-            resource_map=self._load_ranks(language),
-        )
-
-    def get_skill_trees_by_ids(
+    async def get_skills_by_ids(
         self,
+        session: AsyncSession,
         language: str,
         ids: Sequence[str],
-    ) -> list[ResponseBaseModel]:
-        return self._collect_by_ids(
-            resource_name="skill trees",
-            ids=ids,
-            resource_map=self._load_skill_trees(language),
-        )
-
-    def get_promotion(self, language: str, role_id: str) -> ResponseBaseModel:
-        promotion = self._load_promotions(language).get(role_id)
-        if promotion is None:
-            raise AppException(
-                status_code=HTTPStatus.NOT_FOUND,
-                code=40403,
-                message=f"promotion not found: {role_id}",
-            )
-        return promotion
-
-    def _load_characters(self, language: str) -> dict[str, ResponseBaseModel]:
-        return self._load_file_map(
-            language=language,
-            filename=self._CHARACTERS_FILE,
-            model_class=CharacterBaseInfo,
-        )
-
-    def _load_skills(self, language: str) -> dict[str, ResponseBaseModel]:
-        return self._load_file_map(
-            language=language,
-            filename=self._SKILLS_FILE,
-            model_class=CharacterSkill,
-        )
-
-    def _load_ranks(self, language: str) -> dict[str, ResponseBaseModel]:
-        return self._load_file_map(
-            language=language,
-            filename=self._RANKS_FILE,
-            model_class=CharacterRank,
-        )
-
-    def _load_skill_trees(self, language: str) -> dict[str, ResponseBaseModel]:
-        return self._load_file_map(
-            language=language,
-            filename=self._SKILL_TREES_FILE,
-            model_class=CharacterSkillTree,
-        )
-
-    def _load_promotions(self, language: str) -> dict[str, ResponseBaseModel]:
-        return self._load_file_map(
-            language=language,
-            filename=self._PROMOTIONS_FILE,
-            model_class=CharacterPromotion,
-        )
-
-    def _language_path(self, language: str) -> Path:
-        language_path = self._data_root / language
-        if not language_path.is_dir() or not (language_path / self._CHARACTERS_FILE).is_file():
-            raise AppException(
-                status_code=HTTPStatus.NOT_FOUND,
-                code=40401,
-                message=f"unsupported language: {language}",
-            )
-        return language_path
-
-    def _load_file_map(
-        self,
-        *,
-        language: str,
-        filename: str,
-        model_class: type[ResponseBaseModel],
-    ) -> dict[str, ResponseBaseModel]:
-        cache_key = (language, filename)
-        cached = self._file_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        file_path = self._language_path(language) / filename
-        if not file_path.is_file():
-            raise AppException(
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                code=50010,
-                message=f"missing data file: {file_path.name}",
-            )
-
-        with file_path.open("r", encoding="utf-8") as file:
-            payload = cast(object, json.load(file))
-
-        if not isinstance(payload, dict):
-            raise AppException(
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                code=50011,
-                message=f"invalid data payload: {file_path.name}",
-            )
-
-        payload_map = cast(dict[object, object], payload)
-        model_map: dict[str, ResponseBaseModel] = {}
-        for item_id, item_payload in payload_map.items():
-            if not isinstance(item_id, str):
-                raise AppException(
-                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                    code=50012,
-                    message=f"invalid data key in: {file_path.name}",
-                )
-            model_map[item_id] = model_class.model_validate(item_payload)
-
-        self._file_cache[cache_key] = model_map
-        return model_map
-
-    def _collect_by_ids(
-        self,
-        *,
-        resource_name: str,
-        ids: Sequence[str],
-        resource_map: dict[str, ResponseBaseModel],
     ) -> list[ResponseBaseModel]:
         if not ids:
             return []
+        repo = SkillRepository(session)
+        models = await repo.get_by_ids(list(ids), language)
 
-        missing_ids = [item_id for item_id in ids if item_id not in resource_map]
+        found_ids = {m.id for m in models}
+        missing_ids = [i for i in ids if i not in found_ids]
         if missing_ids:
             preview = ", ".join(missing_ids[:5])
             suffix = "" if len(missing_ids) <= 5 else ", ..."
             raise AppException(
                 status_code=HTTPStatus.NOT_FOUND,
                 code=40403,
-                message=f"{resource_name} not found: {preview}{suffix}",
+                message=f"skills not found: {preview}{suffix}",
             )
 
-        return [resource_map[item_id] for item_id in ids]
+        return [self._skill_model_to_pydantic(m) for m in models]
+
+    async def get_ranks_by_ids(
+        self,
+        session: AsyncSession,
+        language: str,
+        ids: Sequence[str],
+    ) -> list[ResponseBaseModel]:
+        if not ids:
+            return []
+        repo = RankRepository(session)
+        models = await repo.get_by_ids(list(ids), language)
+
+        found_ids = {m.id for m in models}
+        missing_ids = [i for i in ids if i not in found_ids]
+        if missing_ids:
+            preview = ", ".join(missing_ids[:5])
+            suffix = "" if len(missing_ids) <= 5 else ", ..."
+            raise AppException(
+                status_code=HTTPStatus.NOT_FOUND,
+                code=40403,
+                message=f"ranks not found: {preview}{suffix}",
+            )
+
+        return [self._rank_model_to_pydantic(m) for m in models]
+
+    async def get_skill_trees_by_ids(
+        self,
+        session: AsyncSession,
+        language: str,
+        ids: Sequence[str],
+    ) -> list[ResponseBaseModel]:
+        if not ids:
+            return []
+        repo = SkillTreeRepository(session)
+        models = await repo.get_by_ids(list(ids), language)
+
+        found_ids = {m.id for m in models}
+        missing_ids = [i for i in ids if i not in found_ids]
+        if missing_ids:
+            preview = ", ".join(missing_ids[:5])
+            suffix = "" if len(missing_ids) <= 5 else ", ..."
+            raise AppException(
+                status_code=HTTPStatus.NOT_FOUND,
+                code=40403,
+                message=f"skill trees not found: {preview}{suffix}",
+            )
+
+        return [self._skill_tree_model_to_pydantic(m) for m in models]
+
+    async def get_promotion(
+        self,
+        session: AsyncSession,
+        language: str,
+        role_id: str,
+    ) -> ResponseBaseModel:
+        repo = PromotionRepository(session)
+        model = await repo.get_by_id(role_id, language)
+        if model is None:
+            raise AppException(
+                status_code=HTTPStatus.NOT_FOUND,
+                code=40403,
+                message=f"promotion not found: {role_id}",
+            )
+        return self._promotion_model_to_pydantic(model)
+
+    async def count_characters(self, session: AsyncSession, language: str) -> int:
+        repo = CharacterRepository(session)
+        return await repo.count(language)
+
+    @staticmethod
+    def _character_model_to_pydantic(model: CharacterModel) -> CharacterBaseInfo:
+        return CharacterBaseInfo(
+            id=model.id,
+            name=model.name,
+            tag=model.tag,
+            rarity=model.rarity,
+            path=model.path,
+            element=model.element,
+            max_sp=model.max_sp,
+            ranks=model.get_ranks(),
+            skills=model.get_skills(),
+            skill_trees=model.get_skill_trees(),
+            icon=model.icon,
+            preview=model.preview,
+            portrait=model.portrait,
+        )
+
+    @staticmethod
+    def _skill_model_to_pydantic(model: SkillModel) -> CharacterSkill:
+        return CharacterSkill(
+            id=model.id,
+            name=model.name,
+            max_level=model.max_level,
+            element=model.element,
+            type=model.type,
+            type_text=model.type_text,
+            effect=model.effect,
+            effect_text=model.effect_text,
+            simple_desc=model.simple_desc,
+            desc=model.desc,
+            params=model.get_params(),
+            icon=model.icon,
+        )
+
+    @staticmethod
+    def _rank_model_to_pydantic(model: RankModel) -> CharacterRank:
+        return CharacterRank(
+            id=model.id,
+            name=model.name,
+            rank=model.rank,
+            desc=model.desc,
+            materials=model.get_materials(),
+            icon=model.icon,
+            level_up_skills=model.get_level_up_skills(),
+        )
+
+    @staticmethod
+    def _skill_tree_model_to_pydantic(model: SkillTreeModel) -> CharacterSkillTree:
+        return CharacterSkillTree(
+            id=model.id,
+            name=model.name,
+            max_level=model.max_level,
+            desc=model.desc,
+            params=model.get_params(),
+            anchor=model.anchor,
+            pre_points=model.get_pre_points(),
+            level_up_skills=model.get_level_up_skills(),
+            levels=model.get_levels(),
+            icon=model.icon,
+        )
+
+    @staticmethod
+    def _promotion_model_to_pydantic(model: PromotionModel) -> CharacterPromotion:
+        return CharacterPromotion(
+            id=model.id,
+            values=model.get_values(),
+            materials=model.get_materials(),
+        )
 
     @staticmethod
     def _validate_pagination(*, offset: int, limit: int) -> None:
@@ -216,3 +254,6 @@ class RoleDataLoader:
                 code=40001,
                 message="offset must be >= 0 and limit must be > 0",
             )
+
+    def _convert_model_data(self, model: ResponseBaseModel) -> dict[str, Any]:
+        return model.model_dump()

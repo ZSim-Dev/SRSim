@@ -1,10 +1,29 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+  - pre-push
+
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.7.1
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
     hooks:
-      # Run the linter.
-      - id: ruff
+      - id: check-yaml
+        args: [--unsafe]
+        exclude: ^deploy/charts/.+/templates/
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.6
+    hooks:
+      - id: ruff-check
         args: [--fix]
-      # Run the formatter.
       - id: ruff-format
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.10.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+        additional_dependencies: [cz-conventional-gitmoji]
+      - id: commitizen-branch
+        stages: [pre-push]
+        additional_dependencies: [cz-conventional-gitmoji]

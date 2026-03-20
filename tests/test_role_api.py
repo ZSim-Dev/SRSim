@@ -1,11 +1,15 @@
+import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from srsim.role_api.api import role as role_api
 from srsim.role_api.core.exception_handlers import register_exception_handlers
+from srsim.role_api.db.session import DatabaseSessionManager, set_session_manager
+from srsim.role_api.services.db_rebuild_service import DbRebuildService
 from srsim.role_api.services.role_data_loader import RoleDataLoader
 from srsim.role_api.services.role_service import RoleService
 
@@ -115,12 +119,18 @@ def _prepare_role_data(root: Path) -> Path:
     return root / "index_new"
 
 
-def _build_client(data_root: Path) -> TestClient:
-    app = FastAPI(title="test-role-api")
-    register_exception_handlers(app)
-    role_api._service = RoleService(loader=RoleDataLoader(data_root=data_root))
-    app.include_router(role_api.router)
-    return TestClient(app)
+async def _setup_database(db_path: Path, data_root: Path) -> DatabaseSessionManager:
+    """Set up the database with test data."""
+    session_manager = DatabaseSessionManager.from_path(db_path)
+    set_session_manager(session_manager)
+
+    # Create tables and load data
+    await session_manager.create_tables()
+    async with session_manager.session() as session:
+        rebuild_service = DbRebuildService(session, data_root=data_root)
+        await rebuild_service.rebuild_language("en")
+
+    return session_manager
 
 
 def test_role_loader_reads_env_data_root(monkeypatch, tmp_path: Path) -> None:
@@ -133,19 +143,37 @@ def test_role_loader_reads_env_data_root(monkeypatch, tmp_path: Path) -> None:
 
 def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
     data_root = _prepare_role_data(tmp_path)
-    client = _build_client(data_root)
+    db_path = tmp_path / "test.db"
 
-    list_response = client.get("/roles", params={"language": "en", "offset": 0, "limit": 5})
-    assert list_response.status_code == 200
-    list_payload = list_response.json()
-    assert list_payload["code"] == 0
-    role_id = list_payload["data"]["items"][0]["id"]
+    # Run async setup in a new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        session_manager = loop.run_until_complete(_setup_database(db_path, data_root))
+    finally:
+        pass  # Keep the loop alive for the test
 
-    panel_response = client.get(
-        f"/roles/{role_id}/panel",
-        params={"language": "en", "level": 1},
-    )
-    assert panel_response.status_code == 200
-    panel_payload = panel_response.json()
-    assert panel_payload["code"] == 0
-    assert panel_payload["data"]["stats"]["hp"] == 1000
+    app = FastAPI(title="test-role-api")
+    register_exception_handlers(app)
+    role_api._service = RoleService(loader=RoleDataLoader(data_root=data_root))
+    app.include_router(role_api.router)
+
+    with TestClient(app, raise_server_exceptions=True) as client:
+        list_response = client.get("/roles", params={"language": "en", "offset": 0, "limit": 5})
+        assert list_response.status_code == 200
+        list_payload = list_response.json()
+        assert list_payload["code"] == 0
+        role_id = list_payload["data"]["items"][0]["id"]
+
+        panel_response = client.get(
+            f"/roles/{role_id}/panel",
+            params={"language": "en", "level": 1},
+        )
+        assert panel_response.status_code == 200
+        panel_payload = panel_response.json()
+        assert panel_payload["code"] == 0
+        assert panel_payload["data"]["stats"]["hp"] == 1000
+
+    # Cleanup
+    loop.run_until_complete(session_manager.close())
+    loop.close()

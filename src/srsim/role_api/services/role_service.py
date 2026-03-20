@@ -1,8 +1,9 @@
-from http import HTTPStatus
 import re
+from http import HTTPStatus
 from typing import ClassVar, cast
 
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from srsim.role_api.core.exceptions import AppException
 from srsim.role_api.models.base import ResponseBaseModel
@@ -36,8 +37,15 @@ class RoleService:
     def __init__(self, loader: RoleDataLoader | None = None) -> None:
         self._loader = RoleDataLoader() if loader is None else loader
 
-    def list_roles(self, language: str, offset: int, limit: int) -> ResponseBaseModel:
-        characters = self._loader.list_characters(
+    async def list_roles(
+        self,
+        session: AsyncSession,
+        language: str,
+        offset: int,
+        limit: int,
+    ) -> ResponseBaseModel:
+        characters = await self._loader.list_characters(
+            session=session,
             language=language,
             offset=offset,
             limit=limit,
@@ -52,13 +60,7 @@ class RoleService:
             )
             for item in characters
         ]
-        total = len(
-            self._loader.list_characters(
-                language=language,
-                offset=0,
-                limit=self._TOTAL_SCAN_LIMIT,
-            )
-        )
+        total = await self._loader.count_characters(session=session, language=language)
         return self._convert_from_payload(
             payload={
                 "items": items,
@@ -70,15 +72,17 @@ class RoleService:
             resource_name="role list",
         )
 
-    def search_roles(
+    async def search_roles(
         self,
+        session: AsyncSession,
         *,
         language: str,
         path: str | None,
         element: str | None,
         name: str | None,
     ) -> ResponseBaseModel:
-        characters = self._loader.list_characters(
+        characters = await self._loader.list_characters(
+            session=session,
             language=language,
             offset=0,
             limit=self._TOTAL_SCAN_LIMIT,
@@ -114,25 +118,38 @@ class RoleService:
             resource_name="role list",
         )
 
-    def get_role_detail(self, language: str, role_id: str) -> ResponseBaseModel:
-        basic = self._get_role_basic(
+    async def get_role_detail(
+        self,
+        session: AsyncSession,
+        language: str,
+        role_id: str,
+    ) -> ResponseBaseModel:
+        basic = await self._get_role_basic(
+            session=session,
             language=language,
             role_id=role_id,
         )
         skills = self._convert_model_list(
-            self._loader.get_skills_by_ids(
-                language=language, ids=self._as_str_list(basic, "skills")
+            await self._loader.get_skills_by_ids(
+                session=session,
+                language=language,
+                ids=self._as_str_list(basic, "skills"),
             ),
             RoleSkillData,
             resource_name="skill",
         )
         ranks = self._convert_model_list(
-            self._loader.get_ranks_by_ids(language=language, ids=self._as_str_list(basic, "ranks")),
+            await self._loader.get_ranks_by_ids(
+                session=session,
+                language=language,
+                ids=self._as_str_list(basic, "ranks"),
+            ),
             RoleRankData,
             resource_name="rank",
         )
         skill_trees = self._convert_model_list(
-            self._loader.get_skill_trees_by_ids(
+            await self._loader.get_skill_trees_by_ids(
+                session=session,
                 language=language,
                 ids=self._as_str_list(basic, "skill_trees"),
             ),
@@ -150,13 +167,20 @@ class RoleService:
             resource_name="role detail",
         )
 
-    def get_role_skills(self, language: str, role_id: str) -> ResponseBaseModel:
-        basic = self._get_role_basic(
+    async def get_role_skills(
+        self,
+        session: AsyncSession,
+        language: str,
+        role_id: str,
+    ) -> ResponseBaseModel:
+        basic = await self._get_role_basic(
+            session=session,
             language=language,
             role_id=role_id,
         )
         skills = self._convert_model_list(
-            self._loader.get_skills_by_ids(
+            await self._loader.get_skills_by_ids(
+                session=session,
                 language=language,
                 ids=self._as_str_list(basic, "skills"),
             ),
@@ -172,14 +196,16 @@ class RoleService:
             resource_name="role skills",
         )
 
-    def get_role_skill_description(
+    async def get_role_skill_description(
         self,
+        session: AsyncSession,
         language: str,
         role_id: str,
         skill_id: str,
         skill_level: int,
     ) -> ResponseBaseModel:
-        basic = self._get_role_basic(
+        basic = await self._get_role_basic(
+            session=session,
             language=language,
             role_id=role_id,
         )
@@ -192,7 +218,9 @@ class RoleService:
             )
 
         skill = self._convert_model(
-            self._loader.get_skills_by_ids(language=language, ids=[skill_id])[0],
+            (await self._loader.get_skills_by_ids(
+                session=session, language=language, ids=[skill_id]
+            ))[0],
             RoleSkillData,
             resource_name="skill",
         )
@@ -241,13 +269,20 @@ class RoleService:
             resource_name="role skill description",
         )
 
-    def get_role_ranks(self, language: str, role_id: str) -> ResponseBaseModel:
-        basic = self._get_role_basic(
+    async def get_role_ranks(
+        self,
+        session: AsyncSession,
+        language: str,
+        role_id: str,
+    ) -> ResponseBaseModel:
+        basic = await self._get_role_basic(
+            session=session,
             language=language,
             role_id=role_id,
         )
         ranks = self._convert_model_list(
-            self._loader.get_ranks_by_ids(
+            await self._loader.get_ranks_by_ids(
+                session=session,
                 language=language,
                 ids=self._as_str_list(basic, "ranks"),
             ),
@@ -263,12 +298,20 @@ class RoleService:
             resource_name="role ranks",
         )
 
-    def get_role_promotions(self, language: str, role_id: str) -> ResponseBaseModel:
-        basic = self._get_role_basic(
+    async def get_role_promotions(
+        self,
+        session: AsyncSession,
+        language: str,
+        role_id: str,
+    ) -> ResponseBaseModel:
+        basic = await self._get_role_basic(
+            session=session,
             language=language,
             role_id=role_id,
         )
-        promotion = self._loader.get_promotion(language=language, role_id=role_id)
+        promotion = await self._loader.get_promotion(
+            session=session, language=language, role_id=role_id
+        )
         promotion_payload = promotion.model_dump()
         return self._convert_from_payload(
             payload={
@@ -280,18 +323,22 @@ class RoleService:
             resource_name="role promotions",
         )
 
-    def get_role_panel(
+    async def get_role_panel(
         self,
+        session: AsyncSession,
         language: str,
         role_id: str,
         level: int,
         promoted: bool | None,
     ) -> ResponseBaseModel:
-        basic = self._get_role_basic(
+        basic = await self._get_role_basic(
+            session=session,
             language=language,
             role_id=role_id,
         )
-        promotion = self._loader.get_promotion(language=language, role_id=role_id)
+        promotion = await self._loader.get_promotion(
+            session=session, language=language, role_id=role_id
+        )
         promotion_payload = promotion.model_dump()
         promotion_values = promotion_payload.get("values")
         if not isinstance(promotion_values, list):
@@ -325,14 +372,15 @@ class RoleService:
             resource_name="role panel",
         )
 
-    def _get_role_basic(
+    async def _get_role_basic(
         self,
         *,
+        session: AsyncSession,
         language: str,
         role_id: str,
     ) -> ResponseBaseModel:
         return self._convert_model(
-            self._loader.get_character(language=language, role_id=role_id),
+            await self._loader.get_character(session=session, language=language, role_id=role_id),
             RoleBasicData,
             resource_name="character",
         )

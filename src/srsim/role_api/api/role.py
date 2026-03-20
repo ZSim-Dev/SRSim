@@ -1,10 +1,12 @@
 from enum import StrEnum
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Depends, Path, Query
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from srsim.role_api.core.exceptions import AppException
+from srsim.role_api.db.session import get_db_session
 from srsim.role_api.models.base import ResponseBaseModel
 from srsim.role_api.models.response import ResponseModel
 from srsim.role_api.models.role_api import (
@@ -17,6 +19,8 @@ from srsim.role_api.models.role_api import (
     RoleSkillDescriptionData,
     RoleSkillsData,
 )
+from srsim.role_api.services.db_rebuild_service import DbRebuildService
+from srsim.role_api.services.role_data_loader import RoleDataLoader
 from srsim.role_api.services.role_service import RoleService
 
 
@@ -55,13 +59,28 @@ def _response_with_typed_data[T: ResponseBaseModel](
     return ResponseModel[T](data=typed_data)
 
 
+@router.post("/roles/rebuild", response_model=ResponseModel[dict])
+async def rebuild_database(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    language: Annotated[str | None, Query()] = None,
+) -> ResponseModel[dict]:
+    rebuild_service = DbRebuildService(session)
+    if language is not None:
+        result = await rebuild_service.rebuild_language(language)
+    else:
+        result = await rebuild_service.rebuild_all()
+    return ResponseModel[dict](data=result)
+
+
 @router.get("/roles", response_model=ResponseModel[RoleListData])
 async def list_roles(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(gt=0, le=200)] = 20,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.list_roles(
+    payload = await _service.list_roles(
+        session=session,
         language=language.value,
         offset=offset,
         limit=limit,
@@ -72,9 +91,11 @@ async def list_roles(
 @router.post("/roles/search", response_model=ResponseModel[RoleListData])
 async def search_roles(
     request: RoleSearchRequest,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.search_roles(
+    payload = await _service.search_roles(
+        session=session,
         language=language.value,
         path=request.path,
         element=request.element,
@@ -89,9 +110,14 @@ async def search_roles(
 )
 async def get_role(
     role_id: Annotated[str, Path(min_length=1)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.get_role_detail(language=language.value, role_id=role_id)
+    payload = await _service.get_role_detail(
+        session=session,
+        language=language.value,
+        role_id=role_id,
+    )
     return _response_with_typed_data(payload, RoleDetailData)
 
 
@@ -101,9 +127,14 @@ async def get_role(
 )
 async def get_role_skills(
     role_id: Annotated[str, Path(min_length=1)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.get_role_skills(language=language.value, role_id=role_id)
+    payload = await _service.get_role_skills(
+        session=session,
+        language=language.value,
+        role_id=role_id,
+    )
     return _response_with_typed_data(payload, RoleSkillsData)
 
 
@@ -114,10 +145,12 @@ async def get_role_skills(
 async def get_role_skill_description(
     role_id: Annotated[str, Path(min_length=1)],
     skill_id: Annotated[str, Path(min_length=1)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
     skill_level: Annotated[int, Query(ge=1)] = 1,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.get_role_skill_description(
+    payload = await _service.get_role_skill_description(
+        session=session,
         language=language.value,
         role_id=role_id,
         skill_id=skill_id,
@@ -132,9 +165,14 @@ async def get_role_skill_description(
 )
 async def get_role_ranks(
     role_id: Annotated[str, Path(min_length=1)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.get_role_ranks(language=language.value, role_id=role_id)
+    payload = await _service.get_role_ranks(
+        session=session,
+        language=language.value,
+        role_id=role_id,
+    )
     return _response_with_typed_data(payload, RoleRanksData)
 
 
@@ -144,9 +182,14 @@ async def get_role_ranks(
 )
 async def get_role_promotions(
     role_id: Annotated[str, Path(min_length=1)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.get_role_promotions(language=language.value, role_id=role_id)
+    payload = await _service.get_role_promotions(
+        session=session,
+        language=language.value,
+        role_id=role_id,
+    )
     return _response_with_typed_data(payload, RolePromotionsData)
 
 
@@ -156,11 +199,13 @@ async def get_role_promotions(
 )
 async def get_role_panel(
     role_id: Annotated[str, Path(min_length=1)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     language: Annotated[Language, Query()] = Language.EN,
     level: Annotated[int, Query(ge=1, le=80)] = 1,
     promoted: Annotated[bool | None, Query()] = None,
 ) -> ResponseModel[ResponseBaseModel]:
-    payload = _service.get_role_panel(
+    payload = await _service.get_role_panel(
+        session=session,
         language=language.value,
         role_id=role_id,
         level=level,
