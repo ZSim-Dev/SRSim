@@ -16,4 +16,8 @@ def test_main_demo_runs() -> None:
     assert result.returncode == 0, result.stderr
     assert "SRSim Minimal Battle Demo" in result.stdout
     assert "Winner: allies" in result.stdout
+    assert "Event Counts:" in result.stdout
+    assert "weakness_break" in result.stdout
+    assert "[Shield]" in result.stdout
+    assert "[Heal]" in result.stdout
     assert "Battle Log:" in result.stdout

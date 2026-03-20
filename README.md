@@ -24,6 +24,16 @@
 - `srsim.core.actions` / `damage`：执行动作与伤害结算
 - `srsim.core.engine`：驱动整场战斗直到一方被击败
 
+当前最小 demo 已覆盖的核心子系统：
+
+- 事件流：Battle Start / Turn Start / Action Start / Action End
+- 资源：HP / Shield / SP / Energy
+- 动作：Basic / Skill / Ultimate
+- 状态：Buff / Debuff 的最小持续时间与过期
+- 属性与弱点：元素、削韧、Weakness Break、Broken 恢复
+- 伤害：基础乘区、防御区、抗性区、易伤区、减伤区、Broken 区
+- 生存：护盾吸收、治疗恢复、击杀判定
+
 ## 相关文档
 
 - 总入口：`docs/battle-system-mechanics.md`

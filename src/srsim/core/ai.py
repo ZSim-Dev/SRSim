@@ -20,7 +20,7 @@ class SimpleAI:
         if actor.energy_full():
             return Decision(self._make_action(actor, target, ActionType.ULTIMATE))
 
-        if battle.skill_points > 0:
+        if actor.kit.skill.sp_cost == 0 or battle.skill_points >= actor.kit.skill.sp_cost:
             return Decision(self._make_action(actor, target, ActionType.SKILL))
 
         return Decision(self._make_action(actor, target, ActionType.BASIC))

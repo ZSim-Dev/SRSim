@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from .events import EventBus
 from .pending_actions import PendingActionQueue
 from .timeline import Timeline
 from .unit import Unit
@@ -12,12 +13,14 @@ class BattleState:
     enemies: list[Unit]
     skill_points: int = 3
     max_skill_points: int = 5
+    events: EventBus = field(init=False)
     timeline: Timeline = field(init=False)
     pending_actions: PendingActionQueue = field(init=False)
     turn_counter: int = 0
     battle_log: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        self.events = EventBus()
         self.timeline = Timeline(self.all_units())
         self.pending_actions = PendingActionQueue()
 
@@ -41,7 +44,7 @@ class BattleState:
 
     def snapshot(self) -> dict[str, Any]:
         return {
-            "allies": [(unit.name, unit.hp, unit.energy) for unit in self.allies],
-            "enemies": [(unit.name, unit.hp, unit.energy) for unit in self.enemies],
+            "allies": [(unit.name, unit.hp, unit.shield, unit.energy) for unit in self.allies],
+            "enemies": [(unit.name, unit.hp, unit.shield, unit.energy) for unit in self.enemies],
             "sp": self.skill_points,
         }
