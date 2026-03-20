@@ -40,6 +40,8 @@ class BattleEngine:
                 ult_action = self.ai.choose_action(actor, self.state).action
                 if isinstance(ult_action, UltimateAction):
                     self._execute_action(ult_action)
+                    if self.state.is_finished():
+                        break
 
             decision = self.ai.choose_action(actor, self.state)
             self._execute_action(decision.action)
