@@ -9,7 +9,7 @@ ModelType = TypeVar("ModelType", bound=Base)
 
 
 class BaseRepository(Generic[ModelType]):
-    _model: ClassVar[type[Base]]
+    _model: ClassVar[type[ModelType]]
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -30,7 +30,9 @@ class BaseRepository(Generic[ModelType]):
             self._model.language == language,
         )
         result = await self._session.execute(stmt)
-        return list(result.scalars().all())
+        models = list(result.scalars().all())
+        models_by_id = {model.id: model for model in models}
+        return [models_by_id[item_id] for item_id in ids if item_id in models_by_id]
 
     async def list_all(self, language: str, offset: int = 0, limit: int = 100) -> list[ModelType]:
         stmt = (

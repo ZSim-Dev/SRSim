@@ -33,9 +33,9 @@ def _prepare_role_data(root: Path) -> Path:
                 "path": "Warrior",
                 "element": "Physical",
                 "max_sp": 120,
-                "ranks": ["rank_1"],
-                "skills": ["skill_1"],
-                "skill_trees": ["tree_1"],
+                "ranks": ["rank_2", "rank_1"],
+                "skills": ["skill_2", "skill_1"],
+                "skill_trees": ["tree_2", "tree_1"],
                 "icon": "icon.png",
                 "preview": "preview.png",
                 "portrait": "portrait.png",
@@ -58,7 +58,21 @@ def _prepare_role_data(root: Path) -> Path:
                 "desc": "Deals #1[i] damage.",
                 "params": [[100]],
                 "icon": "skill.png",
-            }
+            },
+            "skill_2": {
+                "id": "skill_2",
+                "name": "Follow-up Skill",
+                "max_level": 1,
+                "element": "Physical",
+                "type": "Ultra",
+                "type_text": "Ultra",
+                "effect": "Buff",
+                "effect_text": "Buff",
+                "simple_desc": "Boosts #1[i] attack.",
+                "desc": "Boosts #1[i] attack.",
+                "params": [[25]],
+                "icon": "skill2.png",
+            },
         },
     )
     _write_json(
@@ -72,7 +86,16 @@ def _prepare_role_data(root: Path) -> Path:
                 "materials": [{"id": "item_1", "num": 1}],
                 "icon": "rank.png",
                 "level_up_skills": [{"id": "skill_1", "num": 1}],
-            }
+            },
+            "rank_2": {
+                "id": "rank_2",
+                "name": "Rank 2",
+                "rank": 2,
+                "desc": "rank2",
+                "materials": [{"id": "item_2", "num": 2}],
+                "icon": "rank2.png",
+                "level_up_skills": [{"id": "skill_2", "num": 1}],
+            },
         },
     )
     _write_json(
@@ -96,7 +119,26 @@ def _prepare_role_data(root: Path) -> Path:
                     }
                 ],
                 "icon": "tree.png",
-            }
+            },
+            "tree_2": {
+                "id": "tree_2",
+                "name": "Trace 2",
+                "max_level": 1,
+                "desc": "trace2",
+                "params": [[2]],
+                "anchor": "Point02",
+                "pre_points": ["tree_1"],
+                "level_up_skills": [{"id": "skill_2", "num": 1}],
+                "levels": [
+                    {
+                        "promotion": 0,
+                        "level": 1,
+                        "properties": [],
+                        "materials": [{"id": "item_2", "num": 2}],
+                    }
+                ],
+                "icon": "tree2.png",
+            },
         },
     )
     _write_json(
@@ -173,6 +215,17 @@ def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
         panel_payload = panel_response.json()
         assert panel_payload["code"] == 0
         assert panel_payload["data"]["stats"]["hp"] == 1000
+
+        detail_response = client.get(f"/roles/{role_id}", params={"language": "en"})
+        assert detail_response.status_code == 200
+        detail_payload = detail_response.json()
+        assert detail_payload["code"] == 0
+        assert [skill["id"] for skill in detail_payload["data"]["skills"]] == ["skill_2", "skill_1"]
+        assert [rank["id"] for rank in detail_payload["data"]["ranks"]] == ["rank_2", "rank_1"]
+        assert [tree["id"] for tree in detail_payload["data"]["skillTrees"]] == [
+            "tree_2",
+            "tree_1",
+        ]
 
     # Cleanup
     loop.run_until_complete(session_manager.close())

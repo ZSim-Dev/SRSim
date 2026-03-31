@@ -65,6 +65,26 @@ class BaseAction:
         energy_changes: dict[str, int] = {}
         kill_energy_gain = 0
         action_element = self.config.element or self.actor.element
+        defeated_unit_ids: set[str] = set()
+
+        def record_defeat(target: Unit) -> None:
+            nonlocal kill_energy_gain
+            if target.unit_id in defeated_unit_ids:
+                return
+            defeated_unit_ids.add(target.unit_id)
+            defeated.append(target.name)
+            kill_energy_gain += self.actor.gain_energy(10)
+            if state is not None:
+                state.events.emit(
+                    EventType.KILL,
+                    actor_id=self.actor.unit_id,
+                    target_id=target.unit_id,
+                )
+                state.events.emit(
+                    EventType.UNIT_DOWNED,
+                    actor_id=self.actor.unit_id,
+                    target_id=target.unit_id,
+                )
 
         for target in self.targets:
             if target.is_defeated():
@@ -98,6 +118,9 @@ class BaseAction:
                         target_id=target.unit_id,
                         payload={"amount": total_damage},
                     )
+                if target.is_defeated():
+                    record_defeat(target)
+                    continue
 
             if target.toughness is not None:
                 break_outcome = target.toughness.apply(
@@ -126,6 +149,9 @@ class BaseAction:
                             target_id=target.unit_id,
                             payload={"break_damage": break_damage},
                         )
+                    if target.is_defeated():
+                        record_defeat(target)
+                        continue
 
             for template in self.config.target_statuses:
                 instance = target.apply_status(template, self.actor.unit_id)
@@ -139,19 +165,7 @@ class BaseAction:
                     )
 
             if target.is_defeated():
-                defeated.append(target.name)
-                kill_energy_gain += self.actor.gain_energy(10)
-                if state is not None:
-                    state.events.emit(
-                        EventType.KILL,
-                        actor_id=self.actor.unit_id,
-                        target_id=target.unit_id,
-                    )
-                    state.events.emit(
-                        EventType.UNIT_DOWNED,
-                        actor_id=self.actor.unit_id,
-                        target_id=target.unit_id,
-                    )
+                record_defeat(target)
 
         if self.config.self_heal_multiplier > 0 or self.config.self_heal_flat > 0:
             heal_amount = calculate_healing(

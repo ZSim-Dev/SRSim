@@ -175,7 +175,10 @@ class Unit:
         return self.active_effects().vulnerability
 
     def damage_mitigation(self) -> float:
-        return self.active_effects().mitigation
+        remaining_ratio = 1.0
+        for status in self.statuses:
+            remaining_ratio *= 1.0 - status.effect.mitigation
+        return 1.0 - max(0.0, remaining_ratio)
 
     def defense_reduction(self) -> float:
         return self.active_effects().defense_reduction

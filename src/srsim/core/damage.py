@@ -12,6 +12,7 @@ class DamageContext:
     multiplier: float
     element: Element
     can_crit: bool = True
+    did_crit: bool | None = None
     flat_extra_damage: float = 0.0
 
 
@@ -21,8 +22,13 @@ def calculate_damage(context: DamageContext) -> int:
 
     base_damage = attacker_stats.atk * context.multiplier + context.flat_extra_damage
     crit_multiplier = 1.0
-    if context.can_crit and context.attacker.crit_rate() >= 1.0:
-        crit_multiplier = 1.0 + context.attacker.crit_dmg()
+    if context.can_crit:
+        crit_dmg = max(0.0, context.attacker.crit_dmg())
+        if context.did_crit is True:
+            crit_multiplier = 1.0 + crit_dmg
+        elif context.did_crit is None:
+            crit_rate = min(1.0, max(0.0, context.attacker.crit_rate()))
+            crit_multiplier = 1.0 + crit_rate * crit_dmg
 
     dmg_boost_multiplier = 1.0 + context.attacker.damage_boost()
     weaken_multiplier = 1.0 - context.attacker.weaken()
