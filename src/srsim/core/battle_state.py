@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from .events import EventBus
-from .pending_actions import PendingActionQueue
+from .actions import BaseAction, UltimateAction
+from .enums import ActionType
+from .events import EventBus, EventType
+from .pending_actions import InsertedAction, InsertedActionKind, PendingActionQueue
 from .timeline import Timeline
 from .unit import Unit
 
@@ -41,6 +43,39 @@ class BattleState:
 
     def adjust_skill_points(self, delta: int) -> None:
         self.skill_points = max(0, min(self.max_skill_points, self.skill_points + delta))
+
+    def queue_ultimate(self, action: UltimateAction) -> None:
+        if action.config.action_type != ActionType.ULTIMATE:
+            raise ValueError("queue_ultimate requires an ultimate action")
+        self.pending_actions.push(
+            InsertedAction(
+                kind=InsertedActionKind.ULTIMATE,
+                actor=action.actor,
+                action=action,
+            )
+        )
+        self.events.emit(
+            EventType.ULTIMATE_QUEUED,
+            actor_id=action.actor.unit_id,
+            payload={"action": action.config.name},
+        )
+
+    def queue_follow_up(self, action: BaseAction) -> None:
+        self.pending_actions.push(
+            InsertedAction(
+                kind=InsertedActionKind.FOLLOW_UP,
+                actor=action.actor,
+                action=action,
+            )
+        )
+
+    def grant_extra_turn(self, unit: Unit) -> None:
+        self.pending_actions.push(
+            InsertedAction(
+                kind=InsertedActionKind.EXTRA_TURN,
+                actor=unit,
+            )
+        )
 
     def snapshot(self) -> dict[str, Any]:
         return {

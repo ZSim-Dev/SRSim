@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
 from .unit import Unit
@@ -7,6 +7,10 @@ from .unit import Unit
 @dataclass
 class Timeline:
     units: list[Unit]
+    spawn_order: dict[str, int] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.spawn_order = {unit.unit_id: index for index, unit in enumerate(self.units)}
 
     def alive_units(self) -> list[Unit]:
         return [unit for unit in self.units if not unit.is_defeated()]
@@ -15,14 +19,20 @@ class Timeline:
         alive = self.alive_units()
         if not alive:
             return None
-        next_unit = min(alive, key=lambda unit: unit.current_action_value)
+        next_unit = min(
+            alive,
+            key=lambda unit: (
+                unit.current_action_value,
+                self.spawn_order.get(unit.unit_id, len(self.units)),
+            ),
+        )
         tick = next_unit.current_action_value
         for unit in alive:
             unit.speed_tick(tick)
         return next_unit
 
-    def reschedule(self, unit: Unit, advance_ratio: float = 0.0, delay_ratio: float = 0.0) -> None:
-        unit.reset_action_value(advance_ratio=advance_ratio, delay_ratio=delay_ratio)
+    def reschedule(self, unit: Unit) -> None:
+        unit.reset_action_value()
 
     def fast_forward(self, amount: int) -> None:
         for unit in self.alive_units():

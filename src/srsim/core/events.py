@@ -6,6 +6,7 @@ from enum import Enum
 class EventType(Enum):
     BATTLE_START = "battle_start"
     WAVE_START = "wave_start"
+    BEFORE_ACTION_ORDER_RESOLVE = "before_action_order_resolve"
     TURN_START = "turn_start"
     ACTION_START = "action_start"
     HIT = "hit"
@@ -18,6 +19,8 @@ class EventType(Enum):
     STATUS_EXPIRE = "status_expire"
     KILL = "kill"
     UNIT_DOWNED = "unit_downed"
+    ULTIMATE_QUEUED = "ultimate_queued"
+    ULTIMATE_INSERTED = "ultimate_inserted"
     ACTION_END = "action_end"
     TURN_END = "turn_end"
 

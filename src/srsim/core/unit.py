@@ -31,6 +31,7 @@ class Unit:
     current_speed: int = field(init=False)
     base_action_value: int = field(init=False)
     current_action_value: int = field(init=False)
+    is_extra_turn: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
         self.hp = self.base_stats.max_hp
@@ -43,9 +44,8 @@ class Unit:
     def is_defeated(self) -> bool:
         return self.hp <= 0
 
-    def reset_action_value(self, advance_ratio: float = 0.0, delay_ratio: float = 0.0) -> None:
-        offset = self.base_action_value * (delay_ratio - advance_ratio)
-        self.current_action_value = max(0, int(self.base_action_value + offset))
+    def reset_action_value(self) -> None:
+        self.current_action_value = self.base_action_value
 
     def take_damage(self, amount: int) -> int:
         damage = max(0, amount)
@@ -88,6 +88,24 @@ class Unit:
     def speed_tick(self, delta: int) -> None:
         self.current_action_value = max(0, self.current_action_value - delta)
 
+    def recalculate_action_value_for_speed(self, new_speed: int) -> None:
+        self.current_action_value = max(
+            0, int(self.current_action_value * self.current_speed / new_speed)
+        )
+        self.current_speed = new_speed
+        self.base_action_value = action_value_from_spd(new_speed)
+
+    def advance_action(self, advance_ratio: float) -> None:
+        self._adjust_action_gauge(advance_ratio=advance_ratio, delay_ratio=0.0)
+
+    def delay_action(self, delay_ratio: float) -> None:
+        self._adjust_action_gauge(advance_ratio=0.0, delay_ratio=delay_ratio)
+
+    def _adjust_action_gauge(self, *, advance_ratio: float, delay_ratio: float) -> None:
+        current_gauge = self.current_action_value * self.current_speed
+        new_gauge = max(0.0, current_gauge - 10000 * (advance_ratio - delay_ratio))
+        self.current_action_value = max(0, int(new_gauge / self.current_speed))
+
     def apply_shield(self, amount: int) -> int:
         shield_amount = max(0, amount)
         self.shield += shield_amount
@@ -125,12 +143,7 @@ class Unit:
         new_speed = self.snapshot_stats().spd
         if new_speed == self.current_speed:
             return
-        self.current_action_value = max(
-            0,
-            int(self.current_action_value * self.current_speed / new_speed),
-        )
-        self.current_speed = new_speed
-        self.base_action_value = action_value_from_spd(new_speed)
+        self.recalculate_action_value_for_speed(new_speed)
 
     def active_effects(self) -> StatusEffect:
         effect = StatusEffect()

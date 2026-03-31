@@ -138,7 +138,7 @@ class BaseAction:
                             payload={"amount": break_outcome.toughness_damage},
                         )
                 if break_outcome.broken:
-                    target.current_action_value += max(1, int(target.base_action_value * 0.25))
+                    target.delay_action(0.25)
                     break_damage = target.take_damage(break_outcome.break_damage)
                     damage_done[target.name] = damage_done.get(target.name, 0) + break_damage
                     broken_targets.append(target.name)

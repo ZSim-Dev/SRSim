@@ -17,13 +17,21 @@ class SimpleAI:
         if not target:
             raise ValueError("No valid targets")
 
-        if actor.energy_full():
-            return Decision(self._make_action(actor, target, ActionType.ULTIMATE))
-
         if actor.kit.skill.sp_cost == 0 or battle.skill_points >= actor.kit.skill.sp_cost:
             return Decision(self._make_action(actor, target, ActionType.SKILL))
 
         return Decision(self._make_action(actor, target, ActionType.BASIC))
+
+    def choose_ultimate(self, actor: Unit, battle: BattleState) -> UltimateAction | None:
+        if not actor.energy_full():
+            return None
+        target = self._select_target(actor, battle)
+        if not target:
+            raise ValueError("No valid targets")
+        action = self._make_action(actor, target, ActionType.ULTIMATE)
+        if not isinstance(action, UltimateAction):
+            raise TypeError("Ultimate selection must produce an ultimate action")
+        return action
 
     def _select_target(self, actor: Unit, battle: BattleState) -> Unit | None:
         candidates = (

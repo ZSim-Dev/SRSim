@@ -8,6 +8,7 @@ from srsim.core.elements import Element
 from srsim.core.engine import BattleEngine
 from srsim.core.enums import ActionType, Faction
 from srsim.core.events import EventType
+from srsim.core.pending_actions import InsertedAction, InsertedActionKind, PendingActionQueue
 from srsim.core.stats import Stats
 from srsim.core.statuses import StatusEffect, StatusKind, StatusTemplate, TickTiming
 from srsim.core.timeline import Timeline
@@ -294,3 +295,125 @@ def test_kill_energy_and_events_count_same_name_targets_separately() -> None:
     assert result.defeated == ["Shared", "Shared"]
     assert len(kill_events) == 2
     assert {event.target_id for event in kill_events} == {"shared-a", "shared-b"}
+
+
+def test_speed_change_recalculates_remaining_action_value() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    actor.current_action_value = 70
+
+    actor.recalculate_action_value_for_speed(125)
+
+    assert actor.current_speed == 125
+    assert actor.current_action_value == 56
+    assert actor.base_action_value == 80
+
+
+def test_advance_and_delay_apply_immediately_to_remaining_action_value() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    actor.current_action_value = 50
+
+    actor.advance_action(0.3)
+    assert actor.current_action_value == 20
+
+    actor.delay_action(0.25)
+    assert actor.current_action_value == 45
+
+
+def test_extra_turn_preserves_action_value_and_does_not_tick_statuses() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    target = build_test_unit("Target", Faction.ENEMY)
+    state = BattleState(allies=[actor], enemies=[target], skill_points=0, max_skill_points=5)
+    engine = BattleEngine(state)
+
+    actor.energy = actor.base_stats.max_energy
+    actor.current_action_value = 37
+    marker = StatusTemplate(
+        name="Extra Turn Marker",
+        kind=StatusKind.BUFF,
+        duration=2,
+        tick_timing=TickTiming.OWNER_TURN_END,
+        effect=StatusEffect(atk_pct=0.1),
+    )
+    actor.apply_status(marker, actor.unit_id)
+    state.grant_extra_turn(actor)
+
+    engine._process_pending()
+
+    assert actor.current_action_value == 37
+    assert actor.statuses[0].remaining_turns == 2
+    action_starts = [
+        event for event in state.events.history if event.event_type == EventType.ACTION_START
+    ]
+    assert action_starts
+    assert action_starts[0].payload["action"] == actor.kit.basic.name
+    assert not any(
+        event.event_type == EventType.ULTIMATE_INSERTED for event in state.events.history
+    )
+
+
+def test_ultimate_is_inserted_after_action_and_before_next_normal_actor() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    actor.base_stats = Stats(max_hp=800, atk=100, defense=80, spd=120, max_energy=100)
+    actor.__post_init__()
+    actor.energy = actor.base_stats.max_energy
+
+    target = build_test_unit("Target", Faction.ENEMY)
+    target.base_stats = Stats(max_hp=5_000, atk=100, defense=80, spd=90, max_energy=100)
+    target.__post_init__()
+
+    state = BattleState(allies=[actor], enemies=[target], skill_points=0, max_skill_points=5)
+    BattleEngine(state).run(max_turns=2)
+
+    history = state.events.history
+    basic_end_index = next(
+        index
+        for index, event in enumerate(history)
+        if event.event_type == EventType.ACTION_END
+        and event.payload.get("action") == actor.kit.basic.name
+    )
+    ultimate_inserted_index = next(
+        index
+        for index, event in enumerate(history)
+        if event.event_type == EventType.ULTIMATE_INSERTED
+    )
+    ultimate_start_index = next(
+        index
+        for index, event in enumerate(history)
+        if event.event_type == EventType.ACTION_START
+        and event.payload.get("action") == actor.kit.ultimate.name
+    )
+    target_turn_start_index = next(
+        index
+        for index, event in enumerate(history)
+        if event.event_type == EventType.TURN_START and event.actor_id == target.unit_id
+    )
+
+    assert (
+        basic_end_index < ultimate_inserted_index < ultimate_start_index < target_turn_start_index
+    )
+
+
+def test_inserted_action_queue_uses_priority_then_fifo() -> None:
+    first = build_test_unit("First", Faction.ALLY)
+    second = build_test_unit("Second", Faction.ALLY)
+    third = build_test_unit("Third", Faction.ALLY)
+    fourth = build_test_unit("Fourth", Faction.ALLY)
+    queue = PendingActionQueue()
+
+    queue.push(InsertedAction(kind=InsertedActionKind.FOLLOW_UP, actor=first))
+    queue.push(InsertedAction(kind=InsertedActionKind.EXTRA_TURN, actor=second))
+    queue.push(InsertedAction(kind=InsertedActionKind.ULTIMATE, actor=third))
+    queue.push(InsertedAction(kind=InsertedActionKind.EXTRA_TURN, actor=fourth))
+
+    pop_order = [queue.pop(), queue.pop(), queue.pop(), queue.pop()]
+
+    assert [item.kind for item in pop_order if item is not None] == [
+        InsertedActionKind.ULTIMATE,
+        InsertedActionKind.EXTRA_TURN,
+        InsertedActionKind.EXTRA_TURN,
+        InsertedActionKind.FOLLOW_UP,
+    ]
+    assert [item.actor.unit_id for item in pop_order if item is not None][1:3] == [
+        second.unit_id,
+        fourth.unit_id,
+    ]
