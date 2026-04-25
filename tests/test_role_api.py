@@ -2,9 +2,8 @@ import asyncio
 import json
 from pathlib import Path
 
-import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from srsim.role_api.api import role as role_api
 from srsim.role_api.core.exception_handlers import register_exception_handlers
@@ -190,36 +189,38 @@ def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
     data_root = _prepare_role_data(tmp_path)
     db_path = tmp_path / "test.db"
 
-    # Run async setup in a new event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        session_manager, rebuild_result = loop.run_until_complete(
-            _setup_database(db_path, data_root)
+    async def run_test() -> None:
+        session_manager, rebuild_result = await _setup_database(db_path, data_root)
+        try:
+            assert rebuild_result["characters"] == 1
+            assert rebuild_result["skills"] == 2
+            assert rebuild_result["ranks"] == 2
+            assert rebuild_result["skill_trees"] == 2
+            assert rebuild_result["promotions"] == 1
+            assert rebuild_result["total"] == 8
+
+            app = FastAPI(title="test-role-api")
+            register_exception_handlers(app)
+            role_api._service = RoleService(loader=RoleDataLoader(data_root=data_root))
+            app.include_router(role_api.router)
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+                await assert_role_api_responses(client)
+        finally:
+            await session_manager.close()
+
+    async def assert_role_api_responses(client: AsyncClient) -> None:
+        list_response = await client.get(
+            "/roles",
+            params={"language": "en", "offset": 0, "limit": 5},
         )
-    finally:
-        pass  # Keep the loop alive for the test
-
-    assert rebuild_result["characters"] == 1
-    assert rebuild_result["skills"] == 2
-    assert rebuild_result["ranks"] == 2
-    assert rebuild_result["skill_trees"] == 2
-    assert rebuild_result["promotions"] == 1
-    assert rebuild_result["total"] == 8
-
-    app = FastAPI(title="test-role-api")
-    register_exception_handlers(app)
-    role_api._service = RoleService(loader=RoleDataLoader(data_root=data_root))
-    app.include_router(role_api.router)
-
-    with TestClient(app, raise_server_exceptions=True) as client:
-        list_response = client.get("/roles", params={"language": "en", "offset": 0, "limit": 5})
         assert list_response.status_code == 200
         list_payload = list_response.json()
         assert list_payload["code"] == 0
         role_id = list_payload["data"]["items"][0]["id"]
 
-        panel_response = client.get(
+        panel_response = await client.get(
             f"/roles/{role_id}/panel",
             params={"language": "en", "level": 1},
         )
@@ -228,7 +229,7 @@ def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
         assert panel_payload["code"] == 0
         assert panel_payload["data"]["stats"]["hp"] == 1000
 
-        detail_response = client.get(f"/roles/{role_id}", params={"language": "en"})
+        detail_response = await client.get(f"/roles/{role_id}", params={"language": "en"})
         assert detail_response.status_code == 200
         detail_payload = detail_response.json()
         assert detail_payload["code"] == 0
@@ -239,6 +240,4 @@ def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
             "tree_1",
         ]
 
-    # Cleanup
-    loop.run_until_complete(session_manager.close())
-    loop.close()
+    asyncio.run(run_test())
