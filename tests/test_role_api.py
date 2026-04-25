@@ -161,7 +161,10 @@ def _prepare_role_data(root: Path) -> Path:
     return root / "index_new"
 
 
-async def _setup_database(db_path: Path, data_root: Path) -> DatabaseSessionManager:
+async def _setup_database(
+    db_path: Path,
+    data_root: Path,
+) -> tuple[DatabaseSessionManager, dict[str, object]]:
     """Set up the database with test data."""
     session_manager = DatabaseSessionManager.from_path(db_path)
     set_session_manager(session_manager)
@@ -170,9 +173,9 @@ async def _setup_database(db_path: Path, data_root: Path) -> DatabaseSessionMana
     await session_manager.create_tables()
     async with session_manager.session() as session:
         rebuild_service = DbRebuildService(session, data_root=data_root)
-        await rebuild_service.rebuild_language("en")
+        rebuild_result = await rebuild_service.rebuild_language("en")
 
-    return session_manager
+    return session_manager, rebuild_result
 
 
 def test_role_loader_reads_env_data_root(monkeypatch, tmp_path: Path) -> None:
@@ -183,28 +186,6 @@ def test_role_loader_reads_env_data_root(monkeypatch, tmp_path: Path) -> None:
     assert loader.supported_languages() == ["en"]
 
 
-def test_rebuild_language_reports_total_count(tmp_path: Path) -> None:
-    async def run_rebuild() -> dict[str, object]:
-        data_root = _prepare_role_data(tmp_path)
-        session_manager = DatabaseSessionManager.from_path(tmp_path / "test.db")
-        await session_manager.create_tables()
-        try:
-            async with session_manager.session() as session:
-                rebuild_service = DbRebuildService(session, data_root=data_root)
-                return await rebuild_service.rebuild_language("en")
-        finally:
-            await session_manager.close()
-
-    result = asyncio.run(run_rebuild())
-
-    assert result["characters"] == 1
-    assert result["skills"] == 2
-    assert result["ranks"] == 2
-    assert result["skill_trees"] == 2
-    assert result["promotions"] == 1
-    assert result["total"] == 8
-
-
 def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
     data_root = _prepare_role_data(tmp_path)
     db_path = tmp_path / "test.db"
@@ -213,9 +194,18 @@ def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        session_manager = loop.run_until_complete(_setup_database(db_path, data_root))
+        session_manager, rebuild_result = loop.run_until_complete(
+            _setup_database(db_path, data_root)
+        )
     finally:
         pass  # Keep the loop alive for the test
+
+    assert rebuild_result["characters"] == 1
+    assert rebuild_result["skills"] == 2
+    assert rebuild_result["ranks"] == 2
+    assert rebuild_result["skill_trees"] == 2
+    assert rebuild_result["promotions"] == 1
+    assert rebuild_result["total"] == 8
 
     app = FastAPI(title="test-role-api")
     register_exception_handlers(app)
