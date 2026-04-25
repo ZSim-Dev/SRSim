@@ -108,10 +108,11 @@ def test_faster_unit_acts_first_and_more_often() -> None:
 def test_energy_gain_reports_actual_delta_when_capped() -> None:
     actor = build_test_unit("Actor", Faction.ALLY)
     target = build_test_unit("Target", Faction.ENEMY)
+    state = BattleState(allies=[actor], enemies=[target], skill_points=0, max_skill_points=5)
     actor.energy = 90
 
     action = BasicAttackAction(actor, [target], actor.kit.basic)
-    result = action.execute(0)
+    result = action.execute(state)
 
     assert actor.energy == 100
     assert result.energy_delta[actor.name] == 10
@@ -128,7 +129,9 @@ def test_skill_applies_shield_and_status() -> None:
 
     assert actor.shield > 0
     assert "Test Buff" in [status.name for status in actor.statuses]
-    assert executed.shields_added[actor.name] > 0
+    assert any(
+        item.target_id == actor.unit_id and item.amount > 0 for item in executed.shields_added
+    )
 
 
 def test_basic_attack_breaks_weakness_and_emits_event() -> None:
@@ -245,6 +248,7 @@ def test_defeated_target_does_not_receive_break_or_statuses() -> None:
     target = build_test_unit("Target", Faction.ENEMY)
     target.base_stats = target_stats
     target.__post_init__()
+    state = BattleState(allies=[actor], enemies=[target], skill_points=0, max_skill_points=5)
 
     action_config = ActionConfig(
         name="Lethal Attack",
@@ -255,14 +259,14 @@ def test_defeated_target_does_not_receive_break_or_statuses() -> None:
         action_type=ActionType.BASIC,
     )
     action = BasicAttackAction(actor, [target], action_config)
-    result = action.execute(0)
+    result = action.execute(state)
 
     assert target.is_defeated()
     assert target.toughness is not None
     assert not target.toughness.broken
     assert target.statuses == []
     assert result.broken_targets == []
-    assert result.statuses_applied == {}
+    assert result.statuses_applied == []
 
 
 def test_kill_energy_and_events_count_same_name_targets_separately() -> None:
@@ -293,6 +297,7 @@ def test_kill_energy_and_events_count_same_name_targets_separately() -> None:
     assert actor.energy == 40
     assert result.energy_delta[actor.name] == 40
     assert result.defeated == ["Shared", "Shared"]
+    assert [item.target_id for item in result.damage_done] == ["shared-a", "shared-b"]
     assert len(kill_events) == 2
     assert {event.target_id for event in kill_events} == {"shared-a", "shared-b"}
 
@@ -317,6 +322,33 @@ def test_advance_and_delay_apply_immediately_to_remaining_action_value() -> None
 
     actor.delay_action(0.25)
     assert actor.current_action_value == 45
+
+
+def test_full_advance_sets_action_value_to_zero() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    actor.current_action_value = 50
+
+    actor.advance_action(1.0)
+
+    assert actor.current_action_value == 0
+
+
+def test_same_action_value_uses_spawn_order_tiebreak_after_full_advances() -> None:
+    first = build_test_unit("First", Faction.ALLY)
+    second = build_test_unit("Second", Faction.ENEMY)
+    timeline = Timeline([first, second])
+
+    first.current_action_value = 40
+    second.current_action_value = 60
+
+    first.advance_action(1.0)
+    second.advance_action(1.0)
+
+    actor = timeline.next_actor()
+
+    assert actor is first
+    assert first.current_action_value == 0
+    assert second.current_action_value == 0
 
 
 def test_extra_turn_preserves_action_value_and_does_not_tick_statuses() -> None:
@@ -391,6 +423,118 @@ def test_ultimate_is_inserted_after_action_and_before_next_normal_actor() -> Non
     assert (
         basic_end_index < ultimate_inserted_index < ultimate_start_index < target_turn_start_index
     )
+
+
+def test_queued_ultimate_reselects_when_original_target_is_defeated() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    actor.base_stats = Stats(max_hp=800, atk=10_000, defense=80, spd=120, max_energy=100)
+    actor.__post_init__()
+    actor.energy = actor.base_stats.max_energy
+
+    first_target = build_test_unit("First Target", Faction.ENEMY)
+    first_target.unit_id = "first-target"
+    first_target.base_stats = Stats(max_hp=1, atk=100, defense=80, spd=90, max_energy=100)
+    first_target.__post_init__()
+    second_target = build_test_unit("Second Target", Faction.ENEMY)
+    second_target.unit_id = "second-target"
+    second_target.base_stats = Stats(max_hp=5_000, atk=100, defense=80, spd=90, max_energy=100)
+    second_target.__post_init__()
+
+    state = BattleState(
+        allies=[actor],
+        enemies=[first_target, second_target],
+        skill_points=0,
+        max_skill_points=5,
+    )
+
+    BattleEngine(state).run(max_turns=1)
+
+    ultimate_damage_events = [
+        event
+        for event in state.events.history
+        if event.event_type == EventType.HIT
+        and event.actor_id == actor.unit_id
+        and event.payload.get("action") == actor.kit.ultimate.name
+    ]
+
+    assert first_target.is_defeated()
+    assert ultimate_damage_events
+    assert ultimate_damage_events[0].target_id == second_target.unit_id
+    assert second_target.hp < second_target.base_stats.max_hp
+
+
+def test_weakness_break_delays_target_and_restores_toughness_on_turn_start() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    target = build_test_unit("Target", Faction.ENEMY)
+    target.base_stats = Stats(max_hp=5_000, atk=100, defense=80, spd=100, max_energy=100)
+    target.__post_init__()
+    state = BattleState(allies=[actor], enemies=[target], skill_points=0, max_skill_points=5)
+    engine = BattleEngine(state)
+    action = BasicAttackAction(actor, [target], actor.kit.basic)
+
+    first_result = action.execute(state)
+    second_result = action.execute(state)
+
+    assert first_result.broken_targets == []
+    assert target.toughness is not None
+    assert target.toughness.broken
+    assert second_result.broken_targets == [target.name]
+    assert target.current_action_value == target.base_action_value + 25
+    assert any(event.event_type == EventType.WEAKNESS_BREAK for event in state.events.history)
+
+    engine._start_turn(target, tick_turn_boundaries=True)
+
+    assert target.toughness.current_toughness == target.toughness.max_toughness
+    assert not target.toughness.broken
+
+
+def test_damage_uses_broken_multiplier_from_toughness_state() -> None:
+    actor = build_test_unit("Actor", Faction.ALLY)
+    target = build_test_unit("Target", Faction.ENEMY)
+
+    unbroken_damage = calculate_damage(
+        DamageContext(
+            attacker=actor,
+            defender=target,
+            multiplier=1.0,
+            element=Element.PHYSICAL,
+        )
+    )
+    assert target.toughness is not None
+    target.toughness.broken = True
+    broken_damage = calculate_damage(
+        DamageContext(
+            attacker=actor,
+            defender=target,
+            multiplier=1.0,
+            element=Element.PHYSICAL,
+        )
+    )
+
+    assert unbroken_damage == 32
+    assert broken_damage == 35
+
+
+def test_battle_start_and_wave_start_are_distinct_single_fire_events() -> None:
+    allies = [build_test_unit("A", Faction.ALLY)]
+    enemies = [build_test_unit("B", Faction.ENEMY)]
+    state = BattleState(allies=allies, enemies=enemies, skill_points=2, max_skill_points=5)
+
+    BattleEngine(state).run(max_turns=1)
+
+    battle_start_events = [
+        event for event in state.events.history if event.event_type == EventType.BATTLE_START
+    ]
+    wave_start_events = [
+        event for event in state.events.history if event.event_type == EventType.WAVE_START
+    ]
+
+    assert len(battle_start_events) == 1
+    assert len(wave_start_events) == 1
+    assert state.events.history.index(battle_start_events[0]) < state.events.history.index(
+        wave_start_events[0]
+    )
+    assert wave_start_events[0].payload == {"wave": 1}
 
 
 def test_inserted_action_queue_uses_priority_then_fifo() -> None:

@@ -183,6 +183,28 @@ def test_role_loader_reads_env_data_root(monkeypatch, tmp_path: Path) -> None:
     assert loader.supported_languages() == ["en"]
 
 
+def test_rebuild_language_reports_total_count(tmp_path: Path) -> None:
+    async def run_rebuild() -> dict[str, object]:
+        data_root = _prepare_role_data(tmp_path)
+        session_manager = DatabaseSessionManager.from_path(tmp_path / "test.db")
+        await session_manager.create_tables()
+        try:
+            async with session_manager.session() as session:
+                rebuild_service = DbRebuildService(session, data_root=data_root)
+                return await rebuild_service.rebuild_language("en")
+        finally:
+            await session_manager.close()
+
+    result = asyncio.run(run_rebuild())
+
+    assert result["characters"] == 1
+    assert result["skills"] == 2
+    assert result["ranks"] == 2
+    assert result["skill_trees"] == 2
+    assert result["promotions"] == 1
+    assert result["total"] == 8
+
+
 def test_list_roles_and_panel_from_fastapi(tmp_path: Path) -> None:
     data_root = _prepare_role_data(tmp_path)
     db_path = tmp_path / "test.db"

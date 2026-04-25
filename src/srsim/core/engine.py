@@ -93,6 +93,15 @@ class BattleEngine:
         if inserted_action.kind == InsertedActionKind.ULTIMATE:
             if inserted_action.action is None:
                 return
+            if not inserted_action.action.has_living_target():
+                refreshed_action = self.ai.choose_ultimate(actor, self.state)
+                if refreshed_action is None:
+                    return
+                inserted_action = InsertedAction(
+                    kind=inserted_action.kind,
+                    actor=actor,
+                    action=refreshed_action,
+                )
             self.state.events.emit(
                 EventType.ULTIMATE_INSERTED,
                 actor_id=actor.unit_id,
@@ -165,23 +174,26 @@ class BattleEngine:
             return
 
         self.state.adjust_skill_points(result.sp_delta)
-        for target_name, damage in result.damage_done.items():
+        for target_result in result.damage_done:
             self.state.add_log(
-                f"[{action.config.action_type.value}] {result.actor} -> {target_name} for {damage}"
+                f"[{action.config.action_type.value}] {result.actor} -> "
+                f"{target_result.target_name} for {target_result.amount}"
             )
-        for target_name, absorbed in result.shield_absorbed.items():
-            self.state.add_log(f"[Shield Absorb] {target_name} absorbed {absorbed}")
-        for target_name, damage in result.toughness_damage_done.items():
-            self.state.add_log(f"[Toughness] {target_name} -{damage}")
+        for target_result in result.shield_absorbed:
+            self.state.add_log(
+                f"[Shield Absorb] {target_result.target_name} absorbed {target_result.amount}"
+            )
+        for target_result in result.toughness_damage_done:
+            self.state.add_log(f"[Toughness] {target_result.target_name} -{target_result.amount}")
         for target_name in result.broken_targets:
             self.state.add_log(f"[Break] {target_name} weakness broken")
-        for target_name, healed in result.healing_done.items():
-            self.state.add_log(f"[Heal] {target_name} +{healed}")
-        for target_name, shield in result.shields_added.items():
-            self.state.add_log(f"[Shield] {target_name} +{shield}")
-        for target_name, names in result.statuses_applied.items():
-            for name in names:
-                self.state.add_log(f"[Status] {target_name} gained {name}")
+        for target_result in result.healing_done:
+            self.state.add_log(f"[Heal] {target_result.target_name} +{target_result.amount}")
+        for target_result in result.shields_added:
+            self.state.add_log(f"[Shield] {target_result.target_name} +{target_result.amount}")
+        for target_result in result.statuses_applied:
+            for name in target_result.statuses:
+                self.state.add_log(f"[Status] {target_result.target_name} gained {name}")
         for defeated in result.defeated:
             self.state.add_log(f"[KO] {defeated} defeated")
 

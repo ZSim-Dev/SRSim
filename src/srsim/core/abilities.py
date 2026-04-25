@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from .elements import Element
@@ -23,7 +22,6 @@ class ActionConfig:
     actor_statuses: tuple[StatusTemplate, ...] = ()
     target_statuses: tuple[StatusTemplate, ...] = ()
     action_type: ActionType = ActionType.BASIC
-    target_selector: Callable[..., int] | None = None
 
 
 @dataclass

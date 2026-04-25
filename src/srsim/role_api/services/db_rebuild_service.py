@@ -172,7 +172,7 @@ class DbRebuildService:
             )
             counts["promotions"] += 1
 
-        counts["total"] = sum(counts.values()) - 1
+        counts["total"] = sum(counts.values())
         return counts
 
     def _load_json(self, file_path: Path) -> dict[str, Any]:
